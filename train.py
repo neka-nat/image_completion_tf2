@@ -8,7 +8,8 @@ import cv2
 import os
 from keras.optimizers import Adam
 from keras.callbacks import TensorBoard
-from keras.layers import merge
+from keras.layers import merge, Input
+from keras.models import Model
 import keras.backend as K
 from model import model_generator, model_discriminator
 
@@ -23,7 +24,7 @@ class DataGenerator(object):
         self.points = []
         self.masks = []
 
-    def flow_from_directory(self, directory, batch_size=32, hole_min=24, hole_max=48):
+    def flow_from_directory(self, root_dir, batch_size, hole_min=24, hole_max=48):
         for root, dirs, files in os.walk(root_dir):
             for f in files:
                 img = cv2.imread(os.path.join(root, f))
@@ -31,7 +32,7 @@ class DataGenerator(object):
                 self.images.append(img)
 
                 x1 = np.random.randint(0, self.image_size[0] - self.local_size[0] + 1)
-                x1 = np.random.randint(0, self.image_size[1] - self.local_size[1] + 1)
+                y1 = np.random.randint(0, self.image_size[1] - self.local_size[1] + 1)
                 x2, y2 = np.array([x1, y1]) + np.array(self.local_size)
                 self.points.append([x1, y1, x2, y2])
 
@@ -55,17 +56,19 @@ class DataGenerator(object):
 def example_gan(path):
     input_shape = (256, 256, 3)
     local_shape = (128, 128, 3)
-    batch_size = 32
+    batch_size = 4
+    n_epoch = 100
     data_dir = "data/val_256"
 
-    train_datagen = DataGenerator(input_shape[:3])
+    train_datagen = DataGenerator(input_shape[:2], local_shape[:2])
 
     generator = model_generator(input_shape)
     discriminator = model_discriminator(input_shape, local_shape)
+    optimizer = Adam(0.0002, 0.5)
 
     # build model
     org_img = Input(shape=input_shape)
-    mask = Input(shape=input_shape)
+    mask = Input(shape=(input_shape[0], input_shape[1], 1))
 
     in_img = merge([org_img, mask],
                    mode=lambda x: x[0] * (1 - x[1]),
@@ -82,17 +85,17 @@ def example_gan(path):
                           optimizer=optimizer,
                           metrics=['accuracy'])
     for n in range(n_epoch):
-        for inputs, points, masks in train_datagen.flow_from_directory(data_dir):
-            cmp_image = cmp_model.predict(inputs, masks)
+        for inputs, points, masks in train_datagen.flow_from_directory(data_dir, batch_size):
+            cmp_image = cmp_model.predict([inputs, masks])
             local = []
             local_cmp = []
-            for pt in points:
-                x1, y1, x2, y2 = pt
+            for i in range(batch_size):
+                x1, y1, x2, y2 = points[i]
                 local.append(inputs[i][y1:y2, x1:x2, :])
                 local_cmp.append(cmp_image[i][y1:y2, x1:x2, :])
 
-            valid = np.ones((half_batch, 1))
-            fake = np.zeros((half_batch, 1))
+            valid = np.ones((batch_size, 1))
+            fake = np.zeros((batch_size, 1))
 
             # Train the discriminator
             d_loss_real = discriminator.train_on_batch([inputs, np.array(local)], valid)
@@ -100,7 +103,7 @@ def example_gan(path):
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
             g_loss = cmp_model.train_on_batch([inputs, masks], inputs)
-        print("%d [D loss: %f, acc: %.2f%%] [G loss: %f, mse: %f]" % (epoch, d_loss[0], 100*d_loss[1], g_loss[0], g_loss[1]))
+        print("%d [D loss: %f, acc: %.2f%%] [G mse: %f]" % (n, d_loss[0], 100*d_loss[1], g_loss))
 
     # save model
     generator.save(os.path.join(path, "generator.h5"))
