@@ -53,7 +53,7 @@ class DataGenerator(object):
                     self.reset()
                     yield inputs, points, masks
 
-def example_gan(path="output", data_dir="data"):
+def example_gan(result_dir="output", data_dir="data"):
     input_shape = (256, 256, 3)
     local_shape = (128, 128, 3)
     batch_size = 4
@@ -111,11 +111,11 @@ def example_gan(path="output", data_dir="data"):
             axs[i, 1].axis('off')
             axs[i, 2].imshow(inputs[i])
             axs[i, 2].axis('off')
-        fig.savefig("output/result_%d.png" % n)
+        fig.savefig(os.path.join(result_dir, "result_%d.png" % n))
         plt.close()
     # save model
-    generator.save(os.path.join(path, "generator.h5"))
-    discriminator.save(os.path.join(path, "discriminator.h5"))
+    generator.save(os.path.join(result_dir, "generator.h5"))
+    discriminator.save(os.path.join(result_dir, "discriminator.h5"))
 
 
 def main():
