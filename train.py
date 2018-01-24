@@ -53,12 +53,11 @@ class DataGenerator(object):
                     self.reset()
                     yield inputs, points, masks
 
-def example_gan(path):
+def example_gan(path="output", data_dir="data"):
     input_shape = (256, 256, 3)
     local_shape = (128, 128, 3)
     batch_size = 4
     n_epoch = 100
-    data_dir = "data/val_256"
 
     train_datagen = DataGenerator(input_shape[:2], local_shape[:2])
 
@@ -82,8 +81,7 @@ def example_gan(path):
                       optimizer=optimizer)
 
     discriminator.compile(loss='binary_crossentropy', 
-                          optimizer=optimizer,
-                          metrics=['accuracy'])
+                          optimizer=optimizer)
     for n in range(n_epoch):
         for inputs, points, masks in train_datagen.flow_from_directory(data_dir, batch_size):
             cmp_image = cmp_model.predict([inputs, masks])
@@ -103,7 +101,7 @@ def example_gan(path):
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
             g_loss = cmp_model.train_on_batch([inputs, masks], inputs)
-        print("%d [D loss: %f, acc: %.2f%%] [G mse: %f]" % (n, d_loss[0], 100*d_loss[1], g_loss))
+        print("%d [D loss: %f] [G mse: %f]" % (n, d_loss, g_loss))
 
     # save model
     generator.save(os.path.join(path, "generator.h5"))
@@ -111,7 +109,7 @@ def example_gan(path):
 
 
 def main():
-    example_gan("output")
+    example_gan()
 
 
 if __name__ == "__main__":
