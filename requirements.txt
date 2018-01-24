@@ -1,1 +1,4 @@
-keras>=1.1.2
+numpy
+cv2
+matplotlib
+keras>=2.0.0

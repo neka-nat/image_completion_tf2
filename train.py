@@ -1,8 +1,3 @@
-import matplotlib as mpl
-
-# This line allows mpl to run with no DISPLAY defined
-mpl.use('Agg')
-
 import imghdr
 import numpy as np
 import cv2
@@ -12,6 +7,7 @@ from keras.callbacks import TensorBoard
 from keras.layers import merge, Input
 from keras.models import Model
 import keras.backend as K
+import matplotlib.pyplot as plt
 from model import model_generator, model_discriminator
 
 class DataGenerator(object):
@@ -106,7 +102,17 @@ def example_gan(path="output", data_dir="data"):
 
             g_loss = cmp_model.train_on_batch([inputs, masks], inputs)
         print("%d [D loss: %f] [G mse: %f]" % (n, d_loss, g_loss))
-
+        num_img = min(5, batch_size)
+        fig, axs = plt.subplots(num_img, 3)
+        for i in range(num_img):
+            axs[i, 0].imshow(inputs[i] * (1 - masks[i]))
+            axs[i, 0].axis('off')
+            axs[i, 1].imshow(cmp_image[i])
+            axs[i, 1].axis('off')
+            axs[i, 2].imshow(inputs[i])
+            axs[i, 2].axis('off')
+        fig.savefig("output/result_%d.png" % n)
+        plt.close()
     # save model
     generator.save(os.path.join(path, "generator.h5"))
     discriminator.save(os.path.join(path, "discriminator.h5"))
