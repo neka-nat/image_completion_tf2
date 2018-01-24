@@ -3,6 +3,7 @@ import matplotlib as mpl
 # This line allows mpl to run with no DISPLAY defined
 mpl.use('Agg')
 
+import imghdr
 import numpy as np
 import cv2
 import os
@@ -27,7 +28,10 @@ class DataGenerator(object):
     def flow_from_directory(self, root_dir, batch_size, hole_min=24, hole_max=48):
         for root, dirs, files in os.walk(root_dir):
             for f in files:
-                img = cv2.imread(os.path.join(root, f))
+                full_path = os.path.join(root, f)
+                if imghdr.what(full_path) is None:
+                    continue
+                img = cv2.imread(full_path)
                 img = cv2.resize(img, self.image_size)[:, :, ::-1]
                 self.images.append(img)
 
