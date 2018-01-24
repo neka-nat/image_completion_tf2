@@ -107,10 +107,13 @@ def example_gan(result_dir="output", data_dir="data"):
         for i in range(num_img):
             axs[i, 0].imshow(inputs[i] * (1 - masks[i]))
             axs[i, 0].axis('off')
+            axs[i, 0].set_title('Input')
             axs[i, 1].imshow(cmp_image[i])
             axs[i, 1].axis('off')
+            axs[i, 1].set_title('Output')
             axs[i, 2].imshow(inputs[i])
             axs[i, 2].axis('off')
+            axs[i, 2].set_title('Ground Truth')
         fig.savefig(os.path.join(result_dir, "result_%d.png" % n))
         plt.close()
     # save model
