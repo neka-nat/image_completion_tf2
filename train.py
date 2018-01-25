@@ -22,36 +22,41 @@ class DataGenerator(object):
         self.masks = []
 
     def flow_from_directory(self, root_dir, batch_size, hole_min=24, hole_max=48):
+        img_file_list = []
         for root, dirs, files in os.walk(root_dir):
             for f in files:
                 full_path = os.path.join(root, f)
                 if imghdr.what(full_path) is None:
                     continue
-                img = cv2.imread(full_path)
-                img = cv2.resize(img, self.image_size)[:, :, ::-1]
-                self.images.append(img)
+                img_file_list.append(full_path)
 
-                x1 = np.random.randint(0, self.image_size[0] - self.local_size[0] + 1)
-                y1 = np.random.randint(0, self.image_size[1] - self.local_size[1] + 1)
-                x2, y2 = np.array([x1, y1]) + np.array(self.local_size)
-                self.points.append([x1, y1, x2, y2])
+        np.random.shuffle(img_file_list)
+        for f in img_file_list:
+            img = cv2.imread(f)
+            img = cv2.resize(img, self.image_size)[:, :, ::-1]
+            self.images.append(img)
 
-                w, h = np.random.randint(hole_min, hole_max + 1, 2)
-                p1 = x1 + np.random.randint(0, self.local_size[0] - w)
-                q1 = y1 + np.random.randint(0, self.local_size[1] - h)
-                p2 = p1 + w
-                q2 = q1 + h
+            x1 = np.random.randint(0, self.image_size[0] - self.local_size[0] + 1)
+            y1 = np.random.randint(0, self.image_size[1] - self.local_size[1] + 1)
+            x2, y2 = np.array([x1, y1]) + np.array(self.local_size)
+            self.points.append([x1, y1, x2, y2])
 
-                m = np.zeros((self.image_size[0], self.image_size[1], 1), dtype=np.uint8)
-                m[q1:q2 + 1, p1:p2 + 1] = 1
-                self.masks.append(m)
+            w, h = np.random.randint(hole_min, hole_max + 1, 2)
+            p1 = x1 + np.random.randint(0, self.local_size[0] - w)
+            q1 = y1 + np.random.randint(0, self.local_size[1] - h)
+            p2 = p1 + w
+            q2 = q1 + h
 
-                if len(self.images) == batch_size:
-                    inputs = np.asarray(self.images, dtype=np.float32) / 255
-                    points = np.asarray(self.points, dtype=np.int32)
-                    masks = np.asarray(self.masks, dtype=np.float32)
-                    self.reset()
-                    yield inputs, points, masks
+            m = np.zeros((self.image_size[0], self.image_size[1], 1), dtype=np.uint8)
+            m[q1:q2 + 1, p1:p2 + 1] = 1
+            self.masks.append(m)
+
+            if len(self.images) == batch_size:
+                inputs = np.asarray(self.images, dtype=np.float32) / 255
+                points = np.asarray(self.points, dtype=np.int32)
+                masks = np.asarray(self.masks, dtype=np.float32)
+                self.reset()
+                yield inputs, points, masks
 
 def example_gan(result_dir="output", data_dir="data"):
     input_shape = (256, 256, 3)
