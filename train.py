@@ -21,7 +21,7 @@ class DataGenerator(object):
         self.points = []
         self.masks = []
 
-    def flow_from_directory(self, root_dir, batch_size, hole_min=24, hole_max=48):
+    def flow_from_directory(self, root_dir, batch_size, hole_min=64, hole_max=128):
         img_file_list = []
         for root, dirs, files in os.walk(root_dir):
             for f in files:
@@ -41,7 +41,7 @@ class DataGenerator(object):
             x2, y2 = np.array([x1, y1]) + np.array(self.local_size)
             self.points.append([x1, y1, x2, y2])
 
-            w, h = np.random.randint(hole_min, hole_max + 1, 2)
+            w, h = np.random.randint(hole_min, hole_max, 2)
             p1 = x1 + np.random.randint(0, self.local_size[0] - w)
             q1 = y1 + np.random.randint(0, self.local_size[1] - h)
             p2 = p1 + w
