@@ -8,12 +8,16 @@ This is an Keras implementation of ["Globally and Locally Consistent Image Compl
 pip install -r requirements.txt
 ```
 
-## Preparing dataset
+## Prepare dataset
 
 Please download appropriate image dataset and put it under the "data" folder.
 
-## Training
+## Train
 
 ```
 python train.py
 ```
+
+## Result
+
+![result](output/result.png)
