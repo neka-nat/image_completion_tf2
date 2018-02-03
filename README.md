@@ -11,6 +11,21 @@ pip install -r requirements.txt
 ## Prepare dataset
 
 Please download appropriate image dataset and put it under the "data" folder.
+For example, please put the images as follows.
+
+```
+data
+└── place365
+    ├── Places365_00000001.jpg
+    ├── Places365_00000002.jpg
+    ├── Places365_00000003.jpg
+    ├── Places365_00000004.jpg
+    ├── Places365_00000005.jpg
+    ├── Places365_00000006.jpg
+    ├── Places365_00000007.jpg
+    ├── Places365_00000008.jpg
+    ...
+```
 
 ## Train
 
