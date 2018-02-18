@@ -108,6 +108,7 @@ def model_discriminator(global_shape=(256, 256, 3), local_shape=(128, 128, 3)):
     x_l = Conv2D(512, kernel_size=5, strides=2, padding='same')(x_l)
     x_l = BatchNormalization()(x_l)
     x_l = Activation('relu')(x_l)
+    x_l = Flatten()(x_l)
     x_l = Dense(1024, activation='relu')(x_l)
 
     # Global Discriminator
@@ -129,10 +130,10 @@ def model_discriminator(global_shape=(256, 256, 3), local_shape=(128, 128, 3)):
     x_g = Conv2D(512, kernel_size=5, strides=2, padding='same')(x_g)
     x_g = BatchNormalization()(x_g)
     x_g = Activation('relu')(x_g)
+    x_g = Flatten()(x_g)
     x_g = Dense(1024, activation='relu')(x_g)
 
     x = concatenate([x_l, x_g])
-    x = Flatten()(x)
     x = Dense(1, activation='sigmoid')(x)
     return Model(inputs=[g_img, l_img], outputs=x)
 
