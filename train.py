@@ -1,4 +1,3 @@
-import imghdr
 import numpy as np
 import cv2
 import os
@@ -21,37 +20,37 @@ class DataGenerator(object):
         self.points = []
         self.masks = []
 
-    def flow_from_directory(self, root_dir, batch_size, hole_min=64, hole_max=128):
-        img_file_list = []
+    def flow_from_directory(self, root_dir, batch_size):
+        vd_file_list = []
         for root, dirs, files in os.walk(root_dir):
             for f in files:
                 full_path = os.path.join(root, f)
-                if imghdr.what(full_path) is None:
+                if not full_path.endswith(('.mp4', '.mpg', '.mpeg')):
                     continue
-                img_file_list.append(full_path)
+                vd_file_list.append(full_path)
 
-        np.random.shuffle(img_file_list)
-        for f in img_file_list:
-            img = cv2.imread(f)
-            img = cv2.resize(img, self.image_size)[:, :, ::-1]
-            self.images.append(img)
+        np.random.shuffle(vd_file_list)
+        for f in vd_file_list:
+            imgs = []
+            vidcap = cv2.VideoCapture(f)
+            while True:
+                success, image = vidcap.read()
+                if not success:
+                    break
+                cnv_img = cv2.resize(image, self.image_size[1:])[:, :, ::-1]
+                imgs.append(cnv_img)
 
-            x1 = np.random.randint(0, self.image_size[0] - self.local_size[0] + 1)
-            y1 = np.random.randint(0, self.image_size[1] - self.local_size[1] + 1)
-            x2, y2 = np.array([x1, y1]) + np.array(self.local_size)
-            self.points.append([x1, y1, x2, y2])
+            for _ in range(len(imgs) / self.image_size[0]):
+                idxs = np.random.randint(0, len(imgs) - self.image_size[0], (batch_size,))
+                for i in idxs:
+                    self.images.append(imgs[i:i+self.image_size[0]])
 
-            w, h = np.random.randint(hole_min, hole_max, 2)
-            p1 = x1 + np.random.randint(0, self.local_size[0] - w)
-            q1 = y1 + np.random.randint(0, self.local_size[1] - h)
-            p2 = p1 + w
-            q2 = q1 + h
-
-            m = np.zeros((self.image_size[0], self.image_size[1], 1), dtype=np.uint8)
-            m[q1:q2 + 1, p1:p2 + 1] = 1
-            self.masks.append(m)
-
-            if len(self.images) == batch_size:
+                    pt1 = (0.5 * (np.array(self.image_size[1:]) - np.array(self.local_size[1:]))).astype(np.int32)
+                    x2, y2 = pt1 + np.array(self.local_size[1:], dtype=np.int32)
+                    self.points.append([pt1[0], pt1[1], x2, y2])
+                    m = np.ones((self.image_size[0], self.image_size[1], self.image_size[2], 1), dtype=np.uint8)
+                    m[:, pt1[1]:y2, pt1[0]:x2, :] = 0
+                    self.masks.append(m)
                 inputs = np.asarray(self.images, dtype=np.float32) / 255
                 points = np.asarray(self.points, dtype=np.int32)
                 masks = np.asarray(self.masks, dtype=np.float32)
@@ -59,15 +58,15 @@ class DataGenerator(object):
                 yield inputs, points, masks
 
 def example_gan(result_dir="output", data_dir="data"):
-    input_shape = (256, 256, 3)
-    local_shape = (128, 128, 3)
+    input_shape = (5, 128, 128, 3)
+    local_shape = (5, 64, 64, 3)
     batch_size = 4
     n_epoch = 100
     tc = int(n_epoch * 0.18)
     td = int(n_epoch * 0.02)
     alpha = 0.0004
 
-    train_datagen = DataGenerator(input_shape[:2], local_shape[:2])
+    train_datagen = DataGenerator(input_shape[:3], local_shape[:3])
 
     generator = model_generator(input_shape)
     discriminator = model_discriminator(input_shape, local_shape)
@@ -75,7 +74,7 @@ def example_gan(result_dir="output", data_dir="data"):
 
     # build model
     org_img = Input(shape=input_shape)
-    mask = Input(shape=(input_shape[0], input_shape[1], 1))
+    mask = Input(shape=(input_shape[0], input_shape[1], input_shape[2], 1))
 
     in_img = merge([org_img, mask],
                    mode=lambda x: x[0] * (1 - x[1]),
@@ -107,11 +106,9 @@ def example_gan(result_dir="output", data_dir="data"):
         for inputs, points, masks in train_datagen.flow_from_directory(data_dir, batch_size):
             cmp_image = cmp_model.predict([inputs, masks])
             local = []
-            local_cmp = []
             for i in range(batch_size):
                 x1, y1, x2, y2 = points[i]
-                local.append(inputs[i][y1:y2, x1:x2, :])
-                local_cmp.append(cmp_image[i][y1:y2, x1:x2, :])
+                local.append(inputs[i][:, y1:y2, x1:x2, :])
 
             valid = np.ones((batch_size, 1))
             fake = np.zeros((batch_size, 1))
@@ -136,16 +133,16 @@ def example_gan(result_dir="output", data_dir="data"):
                                                       [inputs, valid])
 
         print("%d [D loss: %e] [G mse: %e]" % (n, d_loss, g_loss))
-        num_img = min(5, batch_size)
+        idx = np.random.randint(batch_size)
         fig, axs = plt.subplots(num_img, 3)
-        for i in range(num_img):
-            axs[i, 0].imshow(inputs[i] * (1 - masks[i]))
+        for i in range(input_shape[0]):
+            axs[i, 0].imshow(inputs[idx, i, ...] * (1 - masks[idx, i, ...]))
             axs[i, 0].axis('off')
             axs[i, 0].set_title('Input')
-            axs[i, 1].imshow(cmp_image[i])
+            axs[i, 1].imshow(cmp_image[idx, i, ...])
             axs[i, 1].axis('off')
             axs[i, 1].set_title('Output')
-            axs[i, 2].imshow(inputs[i])
+            axs[i, 2].imshow(inputs[idx, i, ...])
             axs[i, 2].axis('off')
             axs[i, 2].set_title('Ground Truth')
         fig.savefig(os.path.join(result_dir, "result_%d.png" % n))
