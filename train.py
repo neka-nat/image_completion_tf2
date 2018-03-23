@@ -7,6 +7,7 @@ from keras.layers import merge, Input, Lambda
 from keras.models import Model
 from keras.engine.topology import Container
 import keras.backend as K
+import tensorflow as tf
 import matplotlib.pyplot as plt
 from model import model_generator, model_discriminator
 
@@ -96,12 +97,21 @@ def example_gan(result_dir="output", data_dir="data"):
     d_model.compile(loss='binary_crossentropy', 
                     optimizer=optimizer)
 
-    def random_cropping(x, x1, y1, x2, y2):
-        out = []
-        for idx in range(batch_size):
-            out.append(x[idx, y1[idx]:y2[idx], x1[idx]:x2[idx], :])
-        return K.stack(out, axis=0)
-    cropping = Lambda(random_cropping, output_shape=local_shape)
+    def crop_image(img, crop):
+        return tf.image.crop_to_bounding_box(img,
+                                             crop[1],
+                                             crop[0],
+                                             crop[3],
+                                             crop[2])
+
+    in_pts = Input(shape=(4,), dtype='int32')
+    cropping = Lambda(lambda x: K.map_fn(lambda y: crop_image(y[0], y[1]), elems=x, dtype=tf.float32),
+                      output_shape=local_shape)
+    d_container.trainable = False
+    all_model = Model([org_img, mask, in_pts],
+                      [cmp_out, d_container([cmp_out, cropping([cmp_out, in_pts])])])
+    all_model.compile(loss=['mse', 'binary_crossentropy'],
+                      loss_weights=[1.0, alpha], optimizer=optimizer)
 
     for n in range(n_epoch):
         for inputs, points, masks in train_datagen.flow_from_directory(data_dir, batch_size):
@@ -125,15 +135,9 @@ def example_gan(result_dir="output", data_dir="data"):
                 d_loss_fake = d_model.train_on_batch([cmp_image, np.array(local_cmp)], fake)
                 d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
                 if n >= tc + td:
-                    d_container.trainable = False
-                    cropping.arguments = {'x1': points[:, 0], 'y1': points[:, 1],
-                                          'x2': points[:, 2], 'y2': points[:, 3]}
-                    all_model = Model([org_img, mask],
-                                      [cmp_out, d_container([cmp_out, cropping(cmp_out)])])
-                    all_model.compile(loss=['mse', 'binary_crossentropy'],
-                                      loss_weights=[1.0, alpha], optimizer=optimizer)
-                    g_loss = all_model.train_on_batch([inputs, masks],
+                    g_loss = all_model.train_on_batch([inputs, masks, points],
                                                       [inputs, valid])
+                    g_loss = g_loss[0] + alpha * g_loss[1]
 
         print("%d [D loss: %e] [G mse: %e]" % (n, d_loss, g_loss))
         num_img = min(5, batch_size)
