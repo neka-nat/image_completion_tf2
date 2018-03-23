@@ -3,12 +3,11 @@ import numpy as np
 import cv2
 import os
 from keras.optimizers import Adadelta
-from keras.layers import merge, Input, Lambda
+from keras.layers import merge, Input
 from keras.models import Model
 from keras.engine.topology import Container
 from keras.utils import generic_utils
 import keras.backend as K
-import tensorflow as tf
 import matplotlib.pyplot as plt
 from model import model_generator, model_discriminator
 
@@ -93,40 +92,26 @@ def example_gan(result_dir="output", data_dir="data"):
     cmp_model = Model([org_img, mask], cmp_out)
     cmp_model.compile(loss='mse',
                       optimizer=optimizer)
-
-    local_img = Input(shape=local_shape)
-    d_container = Container([org_img, local_img], discriminator([org_img, local_img]))
-    d_model = Model([org_img, local_img], d_container([org_img, local_img]))
-    d_model.compile(loss='binary_crossentropy', 
-                    optimizer=optimizer)
-
-    def crop_image(img, crop):
-        return tf.image.crop_to_bounding_box(img,
-                                             crop[1],
-                                             crop[0],
-                                             crop[3],
-                                             crop[2])
+    cmp_model.summary()
 
     in_pts = Input(shape=(4,), dtype='int32')
-    cropping = Lambda(lambda x: K.map_fn(lambda y: crop_image(y[0], y[1]), elems=x, dtype=tf.float32),
-                      output_shape=local_shape)
+    d_container = Container([org_img, in_pts], discriminator([org_img, in_pts]))
+    d_model = Model([org_img, in_pts], d_container([org_img, in_pts]))
+    d_model.compile(loss='binary_crossentropy', 
+                    optimizer=optimizer)
+    d_model.summary()
+
     d_container.trainable = False
     all_model = Model([org_img, mask, in_pts],
-                      [cmp_out, d_container([cmp_out, cropping([cmp_out, in_pts])])])
+                      [cmp_out, d_container([cmp_out, in_pts])])
     all_model.compile(loss=['mse', 'binary_crossentropy'],
                       loss_weights=[1.0, alpha], optimizer=optimizer)
+    all_model.summary()
 
     for n in range(n_epoch):
         progbar = generic_utils.Progbar(len(train_datagen))
         for inputs, points, masks in train_datagen.flow(batch_size):
             cmp_image = cmp_model.predict([inputs, masks])
-            local = []
-            local_cmp = []
-            for i in range(batch_size):
-                x1, y1, x2, y2 = points[i]
-                local.append(inputs[i][y1:y2, x1:x2, :])
-                local_cmp.append(cmp_image[i][y1:y2, x1:x2, :])
-
             valid = np.ones((batch_size, 1))
             fake = np.zeros((batch_size, 1))
 
@@ -135,8 +120,8 @@ def example_gan(result_dir="output", data_dir="data"):
             if n < tc:
                 g_loss = cmp_model.train_on_batch([inputs, masks], inputs)
             else:
-                d_loss_real = d_model.train_on_batch([inputs, np.array(local)], valid)
-                d_loss_fake = d_model.train_on_batch([cmp_image, np.array(local_cmp)], fake)
+                d_loss_real = d_model.train_on_batch([inputs, points], valid)
+                d_loss_fake = d_model.train_on_batch([cmp_image, points], fake)
                 d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
                 if n >= tc + td:
                     g_loss = all_model.train_on_batch([inputs, masks, points],
@@ -144,7 +129,6 @@ def example_gan(result_dir="output", data_dir="data"):
                     g_loss = g_loss[0] + alpha * g_loss[1]
             progbar.add(inputs.shape[0], values=[("D loss", d_loss), ("G mse", g_loss)])
 
-        print("%d [D loss: %e] [G mse: %e]" % (n, d_loss, g_loss))
         num_img = min(5, batch_size)
         fig, axs = plt.subplots(num_img, 3)
         for i in range(num_img):
