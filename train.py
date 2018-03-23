@@ -6,33 +6,36 @@ from keras.optimizers import Adadelta
 from keras.layers import merge, Input, Lambda
 from keras.models import Model
 from keras.engine.topology import Container
+from keras.utils import generic_utils
 import keras.backend as K
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from model import model_generator, model_discriminator
 
 class DataGenerator(object):
-    def __init__(self, image_size, local_size):
+    def __init__(self, root_dir, image_size, local_size):
         self.image_size = image_size
         self.local_size = local_size
         self.reset()
+        self.img_file_list = []
+        for root, dirs, files in os.walk(root_dir):
+            for f in files:
+                full_path = os.path.join(root, f)
+                if imghdr.what(full_path) is None:
+                    continue
+                self.img_file_list.append(full_path)
+
+    def __len__(self):
+        return len(self.img_file_list)
 
     def reset(self):
         self.images = []
         self.points = []
         self.masks = []
 
-    def flow_from_directory(self, root_dir, batch_size, hole_min=64, hole_max=128):
-        img_file_list = []
-        for root, dirs, files in os.walk(root_dir):
-            for f in files:
-                full_path = os.path.join(root, f)
-                if imghdr.what(full_path) is None:
-                    continue
-                img_file_list.append(full_path)
-
-        np.random.shuffle(img_file_list)
-        for f in img_file_list:
+    def flow(self, batch_size, hole_min=64, hole_max=128):
+        np.random.shuffle(self.img_file_list)
+        for f in self.img_file_list:
             img = cv2.imread(f)
             img = cv2.resize(img, self.image_size)[:, :, ::-1]
             self.images.append(img)
@@ -68,7 +71,7 @@ def example_gan(result_dir="output", data_dir="data"):
     td = int(n_epoch * 0.02)
     alpha = 0.0004
 
-    train_datagen = DataGenerator(input_shape[:2], local_shape[:2])
+    train_datagen = DataGenerator(data_dir, input_shape[:2], local_shape[:2])
 
     generator = model_generator(input_shape)
     discriminator = model_discriminator(input_shape, local_shape)
@@ -114,7 +117,8 @@ def example_gan(result_dir="output", data_dir="data"):
                       loss_weights=[1.0, alpha], optimizer=optimizer)
 
     for n in range(n_epoch):
-        for inputs, points, masks in train_datagen.flow_from_directory(data_dir, batch_size):
+        progbar = generic_utils.Progbar(len(train_datagen))
+        for inputs, points, masks in train_datagen.flow(batch_size):
             cmp_image = cmp_model.predict([inputs, masks])
             local = []
             local_cmp = []
@@ -138,6 +142,7 @@ def example_gan(result_dir="output", data_dir="data"):
                     g_loss = all_model.train_on_batch([inputs, masks, points],
                                                       [inputs, valid])
                     g_loss = g_loss[0] + alpha * g_loss[1]
+            progbar.add(inputs.shape[0], values=[("D loss", d_loss), ("G mse", g_loss)])
 
         print("%d [D loss: %e] [G mse: %e]" % (n, d_loss, g_loss))
         num_img = min(5, batch_size)
