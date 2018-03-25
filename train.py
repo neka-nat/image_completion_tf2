@@ -2,36 +2,39 @@ import imghdr
 import numpy as np
 import cv2
 import os
-from keras.optimizers import Adam
-from keras.callbacks import TensorBoard
+from keras.optimizers import Adadelta
 from keras.layers import merge, Input
 from keras.models import Model
+from keras.engine.topology import Container
+from keras.utils import generic_utils
 import keras.backend as K
 import matplotlib.pyplot as plt
 from model import model_generator, model_discriminator
 
 class DataGenerator(object):
-    def __init__(self, image_size, local_size):
+    def __init__(self, root_dir, image_size, local_size):
         self.image_size = image_size
         self.local_size = local_size
         self.reset()
+        self.img_file_list = []
+        for root, dirs, files in os.walk(root_dir):
+            for f in files:
+                full_path = os.path.join(root, f)
+                if imghdr.what(full_path) is None:
+                    continue
+                self.img_file_list.append(full_path)
+
+    def __len__(self):
+        return len(self.img_file_list)
 
     def reset(self):
         self.images = []
         self.points = []
         self.masks = []
 
-    def flow_from_directory(self, root_dir, batch_size, hole_min=64, hole_max=128):
-        img_file_list = []
-        for root, dirs, files in os.walk(root_dir):
-            for f in files:
-                full_path = os.path.join(root, f)
-                if imghdr.what(full_path) is None:
-                    continue
-                img_file_list.append(full_path)
-
-        np.random.shuffle(img_file_list)
-        for f in img_file_list:
+    def flow(self, batch_size, hole_min=64, hole_max=128):
+        np.random.shuffle(self.img_file_list)
+        for f in self.img_file_list:
             img = cv2.imread(f)
             img = cv2.resize(img, self.image_size)[:, :, ::-1]
             self.images.append(img)
@@ -63,12 +66,15 @@ def example_gan(result_dir="output", data_dir="data"):
     local_shape = (128, 128, 3)
     batch_size = 4
     n_epoch = 100
+    tc = int(n_epoch * 0.18)
+    td = int(n_epoch * 0.02)
+    alpha = 0.0004
 
-    train_datagen = DataGenerator(input_shape[:2], local_shape[:2])
+    train_datagen = DataGenerator(data_dir, input_shape[:2], local_shape[:2])
 
     generator = model_generator(input_shape)
     discriminator = model_discriminator(input_shape, local_shape)
-    optimizer = Adam(0.0002, 0.5)
+    optimizer = Adadelta()
 
     # build model
     org_img = Input(shape=input_shape)
@@ -81,32 +87,48 @@ def example_gan(result_dir="output", data_dir="data"):
     completion = merge([imitation, org_img, mask],
                        mode=lambda x: x[0] * x[2] + x[1] * (1 - x[2]),
                        output_shape=input_shape)
-    cmp_model = Model([org_img, mask], completion)
-    cmp_model.compile(loss='mse', 
+    cmp_container = Container([org_img, mask], completion)
+    cmp_out = cmp_container([org_img, mask])
+    cmp_model = Model([org_img, mask], cmp_out)
+    cmp_model.compile(loss='mse',
                       optimizer=optimizer)
+    cmp_model.summary()
 
-    discriminator.compile(loss='binary_crossentropy', 
-                          optimizer=optimizer)
+    in_pts = Input(shape=(4,), dtype='int32')
+    d_container = Container([org_img, in_pts], discriminator([org_img, in_pts]))
+    d_model = Model([org_img, in_pts], d_container([org_img, in_pts]))
+    d_model.compile(loss='binary_crossentropy', 
+                    optimizer=optimizer)
+    d_model.summary()
+
+    d_container.trainable = False
+    all_model = Model([org_img, mask, in_pts],
+                      [cmp_out, d_container([cmp_out, in_pts])])
+    all_model.compile(loss=['mse', 'binary_crossentropy'],
+                      loss_weights=[1.0, alpha], optimizer=optimizer)
+    all_model.summary()
+
     for n in range(n_epoch):
-        for inputs, points, masks in train_datagen.flow_from_directory(data_dir, batch_size):
+        progbar = generic_utils.Progbar(len(train_datagen))
+        for inputs, points, masks in train_datagen.flow(batch_size):
             cmp_image = cmp_model.predict([inputs, masks])
-            local = []
-            local_cmp = []
-            for i in range(batch_size):
-                x1, y1, x2, y2 = points[i]
-                local.append(inputs[i][y1:y2, x1:x2, :])
-                local_cmp.append(cmp_image[i][y1:y2, x1:x2, :])
-
             valid = np.ones((batch_size, 1))
             fake = np.zeros((batch_size, 1))
 
-            # Train the discriminator
-            d_loss_real = discriminator.train_on_batch([inputs, np.array(local)], valid)
-            d_loss_fake = discriminator.train_on_batch([cmp_image, np.array(local_cmp)], fake)
-            d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+            g_loss = 0.0
+            d_loss = 0.0
+            if n < tc:
+                g_loss = cmp_model.train_on_batch([inputs, masks], inputs)
+            else:
+                d_loss_real = d_model.train_on_batch([inputs, points], valid)
+                d_loss_fake = d_model.train_on_batch([cmp_image, points], fake)
+                d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+                if n >= tc + td:
+                    g_loss = all_model.train_on_batch([inputs, masks, points],
+                                                      [inputs, valid])
+                    g_loss = g_loss[0] + alpha * g_loss[1]
+            progbar.add(inputs.shape[0], values=[("D loss", d_loss), ("G mse", g_loss)])
 
-            g_loss = cmp_model.train_on_batch([inputs, masks], inputs)
-        print("%d [D loss: %f] [G mse: %f]" % (n, d_loss, g_loss))
         num_img = min(5, batch_size)
         fig, axs = plt.subplots(num_img, 3)
         for i in range(num_img):
