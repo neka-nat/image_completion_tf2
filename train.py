@@ -3,9 +3,9 @@ import numpy as np
 import cv2
 import os
 from keras.optimizers import Adadelta
-from keras.layers import merge, Input
+from keras.layers import Lambda, Input
 from keras.models import Model
-from keras.engine.topology import Container
+from keras.engine.network import Network
 from keras.utils import generic_utils
 import keras.backend as K
 import matplotlib.pyplot as plt
@@ -80,14 +80,12 @@ def example_gan(result_dir="output", data_dir="data"):
     org_img = Input(shape=input_shape)
     mask = Input(shape=(input_shape[0], input_shape[1], 1))
 
-    in_img = merge([org_img, mask],
-                   mode=lambda x: x[0] * (1 - x[1]),
-                   output_shape=input_shape)
+    in_img = Lambda(lambda x: x[0] * (1 - x[1]),
+                    output_shape=input_shape)([org_img, mask])
     imitation = generator(in_img)
-    completion = merge([imitation, org_img, mask],
-                       mode=lambda x: x[0] * x[2] + x[1] * (1 - x[2]),
-                       output_shape=input_shape)
-    cmp_container = Container([org_img, mask], completion)
+    completion = Lambda(lambda x: x[0] * x[2] + x[1] * (1 - x[2]),
+                        output_shape=input_shape)([imitation, org_img, mask])
+    cmp_container = Network([org_img, mask], completion)
     cmp_out = cmp_container([org_img, mask])
     cmp_model = Model([org_img, mask], cmp_out)
     cmp_model.compile(loss='mse',
@@ -95,7 +93,7 @@ def example_gan(result_dir="output", data_dir="data"):
     cmp_model.summary()
 
     in_pts = Input(shape=(4,), dtype='int32')
-    d_container = Container([org_img, in_pts], discriminator([org_img, in_pts]))
+    d_container = Network([org_img, in_pts], discriminator([org_img, in_pts]))
     d_model = Model([org_img, in_pts], d_container([org_img, in_pts]))
     d_model.compile(loss='binary_crossentropy', 
                     optimizer=optimizer)
