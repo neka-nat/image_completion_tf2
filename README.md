@@ -5,7 +5,9 @@ This is an Keras implementation of ["Globally and Locally Consistent Image Compl
 ## Install python libraries
 
 ```
-pip install -r requirements.txt
+pip install pipenv
+cd image_completion_keras
+pipenv install
 ```
 
 ## Prepare dataset
@@ -30,6 +32,7 @@ data
 ## Train
 
 ```
+pipenv shell
 python train.py
 ```
 

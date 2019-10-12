@@ -1,9 +1,9 @@
 import numpy as np
-from keras.layers import Reshape, Lambda, Flatten, Activation, Conv2D, Conv2DTranspose, Dense, Input
-from keras.layers.normalization import BatchNormalization
-from keras.layers.merge import concatenate
-from keras.models import Sequential, Model
-import keras.backend as K
+from tensorflow.keras.layers import Reshape, Lambda, Flatten, Activation, Conv2D, Conv2DTranspose, Dense, Input
+from tensorflow.keras.layers import BatchNormalization
+from tensorflow.keras.layers import concatenate
+from tensorflow.keras.models import Sequential, Model
+import tensorflow.keras.backend as K
 import tensorflow as tf
 
 def model_generator(input_shape=(256, 256, 3)):
@@ -102,6 +102,7 @@ def model_discriminator(global_shape=(256, 256, 3), local_shape=(128, 128, 3)):
                       output_shape=local_shape)
     g_img = Input(shape=global_shape)
     l_img = cropping([g_img, in_pts])
+    l_img.set_shape((None,) + local_shape)
 
     # Local Discriminator
     x_l = Conv2D(64, kernel_size=5, strides=2, padding='same')(l_img)
@@ -149,7 +150,7 @@ def model_discriminator(global_shape=(256, 256, 3), local_shape=(128, 128, 3)):
     return Model(inputs=[g_img, in_pts], outputs=x)
 
 if __name__ == "__main__":
-    from keras.utils import plot_model
+    from tensorflow.keras.utils import plot_model
     generator = model_generator()
     generator.summary()
     plot_model(generator, to_file='generator.png', show_shapes=True)

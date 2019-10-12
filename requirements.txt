@@ -1,5 +1,0 @@
-numpy
-cv2
-matplotlib
-tensorflow==1.4.0
-keras==2.2.2

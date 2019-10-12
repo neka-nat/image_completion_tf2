@@ -2,12 +2,12 @@ import imghdr
 import numpy as np
 import cv2
 import os
-from keras.optimizers import Adadelta
-from keras.layers import Lambda, Input
-from keras.models import Model
-from keras.engine.network import Network
-from keras.utils import generic_utils
-import keras.backend as K
+from tensorflow.keras.optimizers import Adadelta
+from tensorflow.keras.layers import Lambda, Input
+from tensorflow.keras.models import Model
+from tensorflow.python.keras.engine.network import Network
+from tensorflow.python.keras.utils import generic_utils
+import tensorflow.keras.backend as K
 import matplotlib.pyplot as plt
 from model import model_generator, model_discriminator
 
