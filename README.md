@@ -12,7 +12,7 @@ pipenv install
 
 ## Prepare dataset
 
-Please download appropriate image dataset and put it under the "data" folder.
+Please download appropriate image dataset and put it under the "data" folder and "test" folder.
 For example, please put the images as follows.
 
 ```
@@ -27,6 +27,17 @@ data
     ├── Places365_00000007.jpg
     ├── Places365_00000008.jpg
     ...
+test
+└── place365_test
+    ├── Places365_test_00000001.jpg
+    ├── Places365_test_00000002.jpg
+    ├── Places365_test_00000003.jpg
+    ├── Places365_test_00000004.jpg
+    ├── Places365_test_00000005.jpg
+    ├── Places365_test_00000006.jpg
+    ├── Places365_test_00000007.jpg
+    ├── Places365_test_00000008.jpg
+    ...
 ```
 
 ## Train
@@ -34,6 +45,13 @@ data
 ```
 pipenv shell
 python train.py
+```
+
+## Test
+
+```
+pipenv shell
+python test.py
 ```
 
 ## Result
